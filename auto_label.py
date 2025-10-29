@@ -51,7 +51,7 @@ def main():
         img_name = os.path.basename(img_path)
         label_path = os.path.join(OUTPUT_LABEL_FOLDER, os.path.splitext(img_name)[0] + ".txt")
 
-        # ✅ 이미 라벨이 있으면 건너뜀 (기존 유지)
+         # ✅ 이미 라벨링된 이미지면 스킵
         if os.path.exists(label_path):
             continue
 
@@ -63,36 +63,39 @@ def main():
         boxes = detect_persons(img)
         label_lines = []
 
-        for i, (x1, y1, x2, y2) in enumerate(boxes):
-            # 얼굴 제외 (상단 15%), 신발 제외 (하단 10%)
-            y1_new = y1 + int(0.15 * (y2 - y1))
-            y2_new = y2 - int(0.10 * (y2 - y1))
-            y1_new = max(0, y1_new)
-            y2_new = min(h_img - 1, y2_new)
-            if y2_new <= y1_new:
-                continue
+        if not boxes:
+            continue  # 사람 없는 경우 스킵
 
-            crop = img[y1_new:y2_new, x1:x2]
-            crop_name = f"{os.path.splitext(img_name)[0]}_{i}.jpg"
-            crop_path = os.path.join(CROP_FOLDER, crop_name)
-            cv2.imwrite(crop_path, crop)
+        # ✅ 첫 번째 감지된 사람만 사용
+        x1, y1, x2, y2 = boxes[0]
 
-            # 기본 교복(0)으로 라벨링 (필요시 폴더 이름 기준으로 클래스 매핑 가능)
-            label_lines.append(f"0 {(x1+x2)/(2*w_img):.6f} {(y1_new+y2_new)/(2*h_img):.6f} {(x2-x1)/w_img:.6f} {(y2_new-y1_new)/h_img:.6f}\n")
+        # 얼굴 제외 (상단 15%), 신발 제외 (하단 10%)
+        y1_new = y1 + int(0.15 * (y2 - y1))
+        y2_new = y2 - int(0.10 * (y2 - y1))
+        y1_new = max(0, y1_new)
+        y2_new = min(h_img - 1, y2_new)
+        if y2_new <= y1_new:
+            continue
 
-            # Annotated 저장
-            img_ann = img.copy()
-            cv2.rectangle(img_ann, (x1, y1_new), (x2, y2_new), (0,255,0), 2)
-            cv2.putText(img_ann, "목~발목", (x1, max(15,y1_new-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
-            ann_path = os.path.join(OUTPUT_ANN_FOLDER, img_name)
-            cv2.imwrite(ann_path, img_ann)
+        crop = img[y1_new:y2_new, x1:x2]
+        crop_name = os.path.basename(img_path)  # ✅ 숫자 안 붙임
+        crop_path = os.path.join(CROP_FOLDER, crop_name)
+        cv2.imwrite(crop_path, crop)
 
-        # 새로 생성된 라벨만 저장
-        if label_lines:
-            with open(label_path, "w") as f:
-                f.writelines(label_lines)
+        # 기본 교복(0)으로 라벨링
+        label_lines.append(f"0 {(x1+x2)/(2*w_img):.6f} {(y1_new+y2_new)/(2*h_img):.6f} {(x2-x1)/w_img:.6f} {(y2_new-y1_new)/h_img:.6f}\n")
 
-    print("[DONE] 새 이미지만 라벨링 완료 (기존 라벨 유지)")
+        # Annotated 저장
+        img_ann = img.copy()
+        cv2.rectangle(img_ann, (x1, y1_new), (x2, y2_new), (0,255,0), 2)
+        cv2.putText(img_ann, "목~발목", (x1, max(15,y1_new-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+        ann_path = os.path.join(OUTPUT_ANN_FOLDER, img_name)
+        cv2.imwrite(ann_path, img_ann)
+
+        with open(label_path, "w") as f:
+            f.writelines(label_lines)
+
+    print("[DONE] 모든 이미지 라벨링 완료 (파일명에 _0 제거됨)")
 
 
 if __name__ == "__main__":
